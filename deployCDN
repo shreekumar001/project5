@@ -1,0 +1,46 @@
+#!/bin/bash
+
+replicas=(ec2-54-85-32-37.compute-1.amazonaws.com
+ec2-54-193-70-31.us-west-1.compute.amazonaws.com
+ec2-52-38-67-246.us-west-2.compute.amazonaws.com
+ec2-52-51-20-200.eu-west-1.compute.amazonaws.com
+ec2-52-29-65-165.eu-central-1.compute.amazonaws.com
+ec2-52-196-70-227.ap-northeast-1.compute.amazonaws.com
+ec2-54-169-117-213.ap-southeast-1.compute.amazonaws.com
+ec2-52-63-206-143.ap-southeast-2.compute.amazonaws.com
+ec2-54-233-185-94.sa-east-1.compute.amazonaws.com)
+
+dns_server=cs5700cdnproject.ccs.neu.edu
+
+if [ "$#" == "10" ]; then
+    if [[ "$1" == "-p" && "$3" == "-o" && "$5" == "-n" && "$7" == "-u" && "$9" == "-i" ]]; then
+        port=$2
+        origin=$4
+        hostname=$6
+        username=$8
+        while getopts "p:o:n:u:i:" opt; do
+            case $opt in
+                i)
+                    keyfile=$OPTARG
+                    ;;
+                \?)
+                    echo "Invalid option: -$OPTARG" >&2
+                    ;;
+            esac
+        done
+        for cdn_server in "${replicas[@]}";do
+            scp -i $keyfile httpserver* $username@$cdn_server:~/ >/dev/null
+            ssh -i $keyfile -n -f $username@$cdn_server 'chmod +x httpserver*'  
+	    echo -n "deployed"
+        done
+
+        scp -i $keyfile dnsserver* $username@$dns_server:~/ >/dev/null
+        ssh -i $keyfile -n -f $username@$dns_server 'chmod +x dnsserver*'
+    else
+        echo -n "Error in deploying CDN Check parameters"
+        exit
+    fi
+else
+    echo "Please provide parameters for deploying"
+    exit
+fi

@@ -1,0 +1,83 @@
+Project 5
+
+Group: letsdoit
+
+Puwen Ma
+Shree kumar Bakthavatsalam
+
+1. High-Level Approach
+
+   +---------+           +-----------+
+   |         |           |  Replica  |
+   |   DNS   |           | +-------+ |
+   | Server  |-----------| |  TCP  | |
+   |         |           | | Server| |
+   +---------+           | +-------+ |
+        |                |           |           +--------+
+   +---------+           | +-------+ |           |        |
+   |         |           | |  HTTP | |           | Origin |
+   |  Client |-----------| | Server| |-----------| Server |
+   |         |           | +-------+ |           |        |
+   +---------+           +-----------+           +--------+
+
+In this project, we implement the both geolocation and active measurement for finding the best replica for client. At beginning, client sends the DNS request to DNS server. Once DNS receive the request coming from client, it will first look for the client information. If there is no record, DNS server will send client’s IP address to replica. The replica will measure the RTT and send the result back to DNS. DNS combines the RTT and finds the best replica for client. The replica mainly deals with cache management and handles HTTP requests.
+
+1.1 DNS Server
+The initial dns server script is coupled with functions for choosing a best replica server by measuring round trip delay between replica server and client.
+EC2 servers = {
+		ec2-54-88-98-7.compute-1.amazonaws.com			Origin server (running Web server on port 8080)
+		ec2-54-85-32-37.compute-1.amazonaws.com			N. Virginia
+		ec2-54-193-70-31.us-west-1.compute.amazonaws.com		N. California
+		ec2-52-38-67-246.us-west-2.compute.amazonaws.com		Oregon
+		ec2-52-51-20-200.eu-west-1.compute.amazonaws.com		Ireland
+		ec2-52-29-65-165.eu-central-1.compute.amazonaws.com		Frankfurt
+		ec2-52-196-70-227.ap-northeast-1.compute.amazonaws.com	Tokyo
+		ec2-54-169-117-213.ap-southeast-1.compute.amazonaws.com	Singapore
+		ec2-52-63-206-143.ap-southeast-2.compute.amazonaws.com	Sydney
+		ec2-54-233-185-94.sa-east-1.compute.amazonaws.com		Sao Paulo
+	       }
+For choosing the best replica server we are implementing two methods:
+ 
+1. Use Geo location based on client ip and provide closest replica server
+2. Use ping from replica servers to actively measure the latency
+
+1.1.2 Using Geolocation IP for the choosing the closest server:
+
+The geolocation of the client is compared with location of all the replica servers geographic location and the closest replica to the client based on latitude and longitude is sent back to the DNS server and then to the client to make a http request.The initial DNS server script is coupled with functions for choosing a best replica server by measuring round trip delay between replica server and client.
+
+1.1.3 Using Ping as active measurement of latency:
+
+Use Scamper with ping as a active network probing tool with the following command scamper -c ‘ping -c 1 -i <ip> | awk ‘END {print 1}’’
+With the ping results replica server with least time to reach client is selected and the IP of that replica server is sent to the DNS server and then to the client. The result is stored in a list and is mapped to client ip. The list is updated every 180 secs (3 Min) with the closest replica to the client.
+_____________________________________________________________________________
+
+1.2 HTTP Server
+1.2.1 Introduction
+Replicas are used for caching the webpages requested by clients, so clients spend less time to get the webpages when they request the same pages in future. Basically, there are two servers running on replicas. The main one is the HTTP server which services clients for webpage and manage cache. The other one is TCP server which deals with measurement (RTT) from replicas to clients and sends that information to DNS server for choosing the best replica.
+
+1.2.2 Cache Management
+Cache bases on URL hits i.e, most requested URL stays on top of the cache. Every time when a newly requested URL is not present in cache, it needs to be stored in cache after being retrieved from the Origin server. The least requested website will be at bottom of the cache, and it is deleted from the cache to give space for new requested web page. There are two types of cache: in memory and in disk cache using a same index. Both of them are no more than 10MB. For in memory cache, we use dictionary in which the key is the path and value is the webpage. For in disk cache, at first time we use URL as file path, but we get the error like the filename is too long. For solving this problem, we create a dictionary for mapping the path to unique short filename and store it in disk.
+RTT measurement
+
+1.2.3 TCP Server For Measurement
+There is a TCP server running on replica by using threading to listen the request coming from DNS. Because the replicas cannot be pinged from outside, we need use replicas to ping client to get the RTT. DNS will send client IP to TCP server running on the replica, and TCP server will measure the RTT using command scamper and send the result back to DNS. If an error happens, like invalid URL or host not pingable, TCP server will send back “null” to DNS.
+
+2. Challenges Faced
+2.1 Cache manage is also a challenge while we using both in memory and in disk cache to store the webpage. They are two types of cache, and we use the same index to manage whether the webpage is hot or not. Another cache challenge is how to store the long path website in disk, because there is an error if the filename is too long. For this problem, we create a dictionary for mapping the path of web to a short and unique name, then store it on the disk.
+2.2 Make code more efficient by creating threads. Like in measurement part, if we don’t create a thread for TCP server, the replica cannot deal with requests of webpage and measurement as same time.
+2.3 There are some tradeoffs in choosing strategies for measurement.
+2.3.1 Using geolocation information to choose the best replica: This way is easier and faster than other way, like active way. However, it is not very accurate because of the BGP policies. Even locations are close, if there is no BGP policy for short path, the package may go to around with long distance and big delay.
+2.3.2 Using active measuring every time client requests webpage to choose the best replica: This way is more accurate than using geolocation information, however it will introduce delay. If we do active measurement every time, the client should wait until all replicas ping the client and send RTT back to DNS for judging.
+2.3.3 Using active measurement with client information cache to choose best replica: This way is faster than active measuring every time because it uses the clients’ information cached from last measurement. However, update the user information in cache is painful. If we update user information at specific time period, there would be a lot of traffics for huge number of clients. Otherwise we can update the client information once we receive the request again, in which DNS gives the best replica to client depending on record and update the record for next request. Client always use the old record and cannot get the “fresh” one.
+
+3.Specific Performance
+3.1 We implement not only the in memory cache, but also the in disk cache, and manage them through same index variable.
+3.2 We combine geolocation and active measurement for better estimation.
+
+
+
+
+
+
+
+

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if [ "$#" == "4" ]; then
+    if [[ "$1" == "-p" && "$3" == "-o" ]]; then
+		python httpserver.py $1 $2 $3 $4
+	else
+		echo "HTTP Wrong parameters!!"
+	fi
+else
+    echo "Please provide correct parameters"
+    exit
+fi
